@@ -1,65 +1,488 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import React, { useState, useMemo, useEffect } from 'react';
+import {
+  DndContext,
+  DragOverlay,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  useDroppable,
+  type DragStartEvent,
+  type DragEndEvent,
+  type DragOverEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  rectSortingStrategy,
+} from '@dnd-kit/sortable';
+import { motion } from 'framer-motion';
+import {
+  Crosshair,
+  GitMerge,
+  Plus,
+  Target,
+  Clock,
+  Skull,
+  Activity,
+  AlertTriangle,
+  Flame,
+  Swords,
+  ShieldAlert,
+} from 'lucide-react';
+import { useStore, type Subject } from './store';
+import SubjectCard from './components/SubjectCard';
+import MergeDialog from './components/MergeDialog';
+import AddSubjectDialog from './components/AddSubjectDialog';
+
+// Droppable zone wrapper — catches drops in empty space within a zone
+function DroppableZone({ id, children, className }: { id: string; children: React.ReactNode; className?: string }) {
+  const { setNodeRef, isOver } = useDroppable({ id });
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+    <div
+      ref={setNodeRef}
+      className={`${className ?? ''} transition-colors duration-150 ${
+        isOver ? 'bg-[#E60000]/[0.06] border-[#E60000]/40' : ''
+      }`}
+    >
+      {children}
+    </div>
+  );
+}
+
+export default function WarRoom() {
+  const {
+    subjects,
+    mergeMode,
+    mergeSelection,
+    toggleMergeMode,
+    moveToZone,
+    reorder,
+  } = useStore();
+
+  const [activeSubject, setActiveSubject] = useState<Subject | null>(null);
+  const [showMergeDialog, setShowMergeDialog] = useState(false);
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  // Hydration guard for Zustand + localStorage
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    })
+  );
+
+  const activeSubjects = useMemo(
+    () =>
+      subjects
+        .filter((s) => s.zone === 'active')
+        .sort((a, b) => a.order - b.order),
+    [subjects]
+  );
+
+  const standbySubjects = useMemo(
+    () =>
+      subjects
+        .filter((s) => s.zone === 'standby')
+        .sort((a, b) => a.order - b.order),
+    [subjects]
+  );
+
+  const totalDays = subjects.reduce((sum, s) => sum + s.totalDays, 0);
+  const completedDays = subjects.reduce((sum, s) => sum + s.completedDays, 0);
+  const overallPercentage = totalDays > 0 ? Math.round((completedDays / totalDays) * 100) : 0;
+
+  // Deadline = today + total remaining days from ACTIVE directives
+  const activeRemainingDays = activeSubjects.reduce(
+    (sum, s) => sum + (s.totalDays - s.completedDays),
+    0
+  );
+  const now = new Date();
+  const deadlineDate = new Date(now.getTime() + activeRemainingDays * 24 * 60 * 60 * 1000);
+  const deadlineDateStr = deadlineDate.toLocaleDateString('en-US', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  }).toUpperCase();
+
+  // Overall fixed deadline: 31 October 2026
+  const overallDeadline = new Date('2026-10-31T23:59:59');
+  const daysUntilOverallDeadline = Math.max(0, Math.ceil((overallDeadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+
+  // Open merge dialog when 2 subjects are selected
+  useEffect(() => {
+    if (mergeSelection.length === 2) {
+      setShowMergeDialog(true);
+    }
+  }, [mergeSelection]);
+
+  const handleDragStart = (event: DragStartEvent) => {
+    const sub = subjects.find((s) => s.id === event.active.id);
+    if (sub) setActiveSubject(sub);
+  };
+
+  const handleDragOver = (event: DragOverEvent) => {
+    const { active, over } = event;
+    if (!over) return;
+
+    const activeId = active.id as string;
+    const overId = over.id as string;
+    if (activeId === overId) return;
+
+    const activeSub = subjects.find((s) => s.id === activeId);
+
+    // Dropping over a zone container (empty space)
+    if (overId === 'zone-active' || overId === 'zone-standby') {
+      const targetZone = overId === 'zone-active' ? 'active' : 'standby';
+      if (activeSub && activeSub.zone !== targetZone) {
+        moveToZone(activeId, targetZone);
+      }
+      return;
+    }
+
+    // Dropping over another subject card
+    const overSub = subjects.find((s) => s.id === overId);
+    if (!activeSub || !overSub) return;
+
+    // Cross-container: move to new zone in real-time so items shift
+    if (activeSub.zone !== overSub.zone) {
+      moveToZone(activeId, overSub.zone);
+    }
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveSubject(null);
+
+    if (!over) return;
+
+    const activeId = active.id as string;
+    const overId = over.id as string;
+
+    if (activeId === overId) return;
+
+    // Dropping on zone container — already handled in onDragOver
+    if (overId === 'zone-active' || overId === 'zone-standby') return;
+
+    // Reorder within zone
+    const activeSub = subjects.find((s) => s.id === activeId);
+    const overSub = subjects.find((s) => s.id === overId);
+
+    if (activeSub && overSub) {
+      reorder(activeId, overId);
+    }
+  };
+
+  const currentDate = new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+
+  // Show loading skeleton until hydrated
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Skull size={48} className="text-[#E60000] animate-pulse" />
+          <p className="font-mono text-sm uppercase tracking-widest text-neutral-500 animate-flicker">
+            INITIALIZING WAR ROOM...
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[#050505] flex flex-col">
+      {/* ===== HEADER ===== */}
+      <header className="border-b border-neutral-800 bg-[#080808]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          {/* Title row */}
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6">
+            <div>
+              <div className="flex items-center gap-3 mb-2">
+                <Skull size={28} className="text-[#E60000]" />
+                <h1 className="font-mono text-2xl sm:text-3xl font-black uppercase tracking-wider text-white animate-glitch-text">
+                  GATE WAR ROOM
+                </h1>
+              </div>
+              <p className="font-mono text-[10px] sm:text-xs uppercase tracking-[0.3em] text-neutral-500">
+                <span className="text-[#E60000] animate-status-blink">●</span>{' '}
+                COMMAND CENTER ACTIVE // {currentDate.toUpperCase()}
+              </p>
+            </div>
+
+            {/* Quick stats */}
+            <div className="flex items-center gap-4 sm:gap-6">
+              <div className="text-right">
+                <p className="font-mono text-[10px] uppercase tracking-widest text-neutral-400">
+                  ACTIVE DEADLINE
+                </p>
+                <p className={`font-mono text-xl sm:text-2xl font-black ${activeRemainingDays < 30 ? 'text-[#E60000] animate-flicker' : 'text-[#E60000]'}`}>
+                  {activeRemainingDays}
+                  <span className="text-xs text-neutral-400 ml-1">DAYS</span>
+                </p>
+                <p className="font-mono text-[10px] text-neutral-400 mt-0.5">
+                  {deadlineDateStr}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Overall progress bar */}
+          <div className="mb-4">
+            <div className="flex items-center mb-1.5">
+              <span className="font-mono text-xs uppercase tracking-widest text-neutral-300 flex items-center gap-1.5">
+                <Activity size={12} className="text-[#E60000]" />
+                OVERALL CAMPAIGN PROGRESS
+              </span>
+            </div>
+            <div className="h-2.5 bg-[#0a0a0a] rounded-none border border-neutral-800 overflow-hidden">
+              <motion.div
+                className={`h-full rounded-none ${
+                  overallPercentage === 100
+                    ? 'bg-green-500'
+                    : 'bg-gradient-to-r from-[#991b1b] via-[#E60000] to-[#ff3333]'
+                }`}
+                initial={{ width: 0 }}
+                animate={{ width: `${overallPercentage}%` }}
+                transition={{ duration: 0.8, ease: 'easeOut' }}
+              />
+            </div>
+          </div>
+
+          {/* Stats row */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+
+            <div className="bg-[#0a0a0a] border border-neutral-800 rounded-sm p-3">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Target size={12} className="text-neutral-400" />
+                <span className="font-mono text-[10px] uppercase tracking-widest text-neutral-400">
+                  ACTIVE
+                </span>
+              </div>
+              <p className="font-mono text-lg font-bold text-[#E60000]">
+                {activeSubjects.length}
+              </p>
+            </div>
+
+            <div className="bg-[#0a0a0a] border border-neutral-800 rounded-sm p-3">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Clock size={12} className="text-neutral-400" />
+                <span className="font-mono text-[10px] uppercase tracking-widest text-neutral-400">
+                  STANDBY
+                </span>
+              </div>
+              <p className="font-mono text-lg font-bold text-neutral-300">
+                {standbySubjects.length}
+              </p>
+            </div>
+
+            <div className="bg-[#0a0a0a] border border-neutral-800 rounded-sm p-3">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Flame size={12} className="text-neutral-400" />
+                <span className="font-mono text-[10px] uppercase tracking-widest text-neutral-400">
+                  DEADLINE
+                </span>
+              </div>
+              <p className={`font-mono text-lg font-bold ${daysUntilOverallDeadline < 60 ? 'text-[#E60000]' : 'text-orange-400'}`}>
+                {daysUntilOverallDeadline}
+                <span className="text-xs text-neutral-400 ml-1">DAYS</span>
+              </p>
+              <p className="font-mono text-[10px] text-neutral-400 mt-0.5">
+                31 OCT 2026
+              </p>
+            </div>
+
+            <div className="bg-[#0a0a0a] border border-neutral-800 rounded-sm p-3">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Activity size={12} className="text-neutral-400" />
+                <span className="font-mono text-[10px] uppercase tracking-widest text-neutral-400">
+                  COMPLETION
+                </span>
+              </div>
+              <p className={`font-mono text-lg font-bold ${overallPercentage === 100 ? 'text-green-400' : overallPercentage > 50 ? 'text-[#ff6666]' : 'text-[#E60000]'}`}>
+                {overallPercentage}%
+              </p>
+            </div>
+          </div>
         </div>
+      </header>
+
+      {/* ===== TOOLBAR ===== */}
+      <div className="border-b border-neutral-800 bg-[#0a0a0a]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center gap-3 flex-wrap">
+          <button
+            onClick={() => setShowAddDialog(true)}
+            className="flex items-center gap-2 bg-[#111] hover:bg-[#1a1a1a] text-neutral-300 hover:text-white font-mono text-[11px] font-bold uppercase tracking-wider py-2 px-4 rounded-sm border border-neutral-700 hover:border-[#E60000] transition-all hover:shadow-[0_0_10px_rgba(230,0,0,0.2)]"
+          >
+            <Plus size={14} />
+            DEPLOY SUBJECT
+          </button>
+
+          <button
+            onClick={toggleMergeMode}
+            className={`flex items-center gap-2 font-mono text-[11px] font-bold uppercase tracking-wider py-2 px-4 rounded-sm border transition-all ${
+              mergeMode
+                ? 'bg-[#E60000]/10 text-[#E60000] border-[#E60000] shadow-[0_0_10px_rgba(230,0,0,0.3)]'
+                : 'bg-[#111] hover:bg-[#1a1a1a] text-neutral-300 hover:text-white border-neutral-700 hover:border-[#E60000] hover:shadow-[0_0_10px_rgba(230,0,0,0.2)]'
+            }`}
+          >
+            <GitMerge size={14} />
+            {mergeMode ? 'EXIT MERGE' : 'MERGE MODE'}
+          </button>
+
+          {mergeMode && (
+            <motion.span
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="font-mono text-[10px] uppercase tracking-widest text-[#E60000] flex items-center gap-1.5"
+            >
+              <AlertTriangle size={12} className="animate-pulse" />
+              SELECT 2 SUBJECTS TO MERGE ({mergeSelection.length}/2)
+            </motion.span>
+          )}
+        </div>
+      </div>
+
+      {/* ===== MAIN CONTENT — TWO-TIER LAYOUT ===== */}
+      <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragEnd={handleDragEnd}
+        >
+          {/* ===== ACTIVE DIRECTIVES ZONE ===== */}
+          <section className="mb-10">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex items-center gap-2">
+                <Swords size={18} className="text-[#E60000]" />
+                <h2 className="font-mono text-sm font-black uppercase tracking-[0.2em] text-white">
+                  ACTIVE DIRECTIVES
+                </h2>
+              </div>
+              <div className="flex-1 h-px bg-gradient-to-r from-[#E60000]/40 to-transparent" />
+              <span className="font-mono text-[10px] uppercase tracking-widest text-[#E60000] flex items-center gap-1">
+                <span className="animate-status-blink">●</span>
+                {activeSubjects.length} ENGAGED
+              </span>
+            </div>
+
+            <DroppableZone
+              id="zone-active"
+              className="min-h-[120px] rounded-sm border border-[#E60000]/20 bg-[#E60000]/[0.02] p-4"
+            >
+              <SortableContext
+                items={activeSubjects.map((s) => s.id)}
+                strategy={rectSortingStrategy}
+              >
+                {activeSubjects.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-neutral-600">
+                    <ShieldAlert size={32} className="mb-2 opacity-40" />
+                    <p className="font-mono text-xs uppercase tracking-widest">
+                      NO ACTIVE DIRECTIVES
+                    </p>
+                    <p className="font-mono text-[10px] text-neutral-700 mt-1">
+                      DRAG SUBJECTS HERE TO ACTIVATE
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {activeSubjects.map((subject) => (
+                      <SubjectCard key={subject.id} subject={subject} large />
+                    ))}
+                  </div>
+                )}
+              </SortableContext>
+            </DroppableZone>
+          </section>
+
+          {/* ===== STANDBY QUEUE ZONE ===== */}
+          <section>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex items-center gap-2">
+                <Clock size={18} className="text-neutral-500" />
+                <h2 className="font-mono text-sm font-black uppercase tracking-[0.2em] text-neutral-400">
+                  STANDBY QUEUE
+                </h2>
+              </div>
+              <div className="flex-1 h-px bg-gradient-to-r from-neutral-700/40 to-transparent" />
+              <span className="font-mono text-[10px] uppercase tracking-widest text-neutral-600">
+                {standbySubjects.length} PENDING
+              </span>
+            </div>
+
+            <DroppableZone
+              id="zone-standby"
+              className="min-h-[120px] rounded-sm border border-neutral-800 bg-neutral-900/30 p-4"
+            >
+              <SortableContext
+                items={standbySubjects.map((s) => s.id)}
+                strategy={rectSortingStrategy}
+              >
+                {standbySubjects.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-neutral-700">
+                    <Crosshair size={32} className="mb-2 opacity-30" />
+                    <p className="font-mono text-xs uppercase tracking-widest">
+                      STANDBY QUEUE EMPTY
+                    </p>
+                    <p className="font-mono text-[10px] text-neutral-800 mt-1">
+                      ALL SUBJECTS DEPLOYED
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                    {standbySubjects.map((subject) => (
+                      <SubjectCard key={subject.id} subject={subject} compact />
+                    ))}
+                  </div>
+                )}
+              </SortableContext>
+            </DroppableZone>
+          </section>
+
+          {/* Drag overlay */}
+          <DragOverlay>
+            {activeSubject ? (
+              <SubjectCard subject={activeSubject} isDragOverlay />
+            ) : null}
+          </DragOverlay>
+        </DndContext>
       </main>
+
+      {/* ===== FOOTER ===== */}
+      <footer className="border-t border-neutral-800 bg-[#080808]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
+          <p className="font-mono text-[9px] uppercase tracking-widest text-neutral-700">
+            GATE WAR ROOM v1.0 // NO MERCY. NO EXCUSES.
+          </p>
+          <p className="font-mono text-[9px] uppercase tracking-widest text-neutral-700 flex items-center gap-1.5">
+            <span className="text-green-600 animate-status-blink">●</span>
+            SYSTEM OPERATIONAL
+          </p>
+        </div>
+      </footer>
+
+      {/* ===== DIALOGS ===== */}
+      <MergeDialog
+        open={showMergeDialog}
+        onClose={() => setShowMergeDialog(false)}
+      />
+      <AddSubjectDialog
+        open={showAddDialog}
+        onClose={() => setShowAddDialog(false)}
+      />
     </div>
   );
 }
