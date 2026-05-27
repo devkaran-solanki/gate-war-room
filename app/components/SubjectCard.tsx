@@ -143,7 +143,7 @@ export default function SubjectCard({ subject, isDragOverlay, compact, large }: 
         `}
       >
         {/* Header row: drag handle + name + actions */}
-        <div className={`flex items-center gap-2 ${compact ? 'mb-2' : large ? 'mb-4' : 'mb-3'}`}>
+        <div className={`flex items-center gap-2 ${compact ? 'mb-2 min-h-[24px]' : large ? 'mb-4 min-h-[28px]' : 'mb-3 min-h-[24px]'}`}>
           {/* Drag handle */}
           {!isDragOverlay && !mergeMode && (
             <button
@@ -160,14 +160,14 @@ export default function SubjectCard({ subject, isDragOverlay, compact, large }: 
           {mergeMode && (
             <div
               className={`
-                w-5 h-5 rounded-none border-2 flex items-center justify-center transition-all
+                w-6 h-6 shrink-0 rounded-none border-2 flex items-center justify-center transition-all
                 ${isSelected
                   ? 'bg-[#E60000] border-[#E60000]'
                   : 'border-neutral-600 hover:border-[#E60000]'
                 }
               `}
             >
-              {isSelected && <Check size={12} className="text-white" />}
+              {isSelected && <Check size={14} className="text-white" />}
             </div>
           )}
 

@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/devkaran-solanki/gate-war-room/main/public/file.svg" width="80" alt="Logo" style="display:none;" />
+  <img src="public/skull.svg" width="80" alt="Skull Logo" />
   <h1 align="center">GATE WAR ROOM</h1>
 
   <p align="center">
