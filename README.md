@@ -1,36 +1,90 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+<div align="center">
+  <img src="https://raw.githubusercontent.com/devkaran-solanki/gate-war-room/main/public/file.svg" width="80" alt="Logo" style="display:none;" />
+  <h1 align="center">GATE WAR ROOM</h1>
 
-## Getting Started
+  <p align="center">
+    <strong>NO MERCY. NO EXCUSES.</strong><br/>
+    An aggressive, high-tension, brutally aesthetic dashboard built to track preparation for the GATE 2027 examination.
+  </p>
 
-First, run the development server:
+  <p align="center">
+    <a href="https://gate-war-room.vercel.app/"><strong>View Live Dashboard</strong></a>
+  </p>
+
+  <p align="center">
+    <a href="https://nextjs.org/"><img src="https://img.shields.io/badge/Next.js-000000?style=flat-square&logo=next.js" alt="Next.js" /></a>
+    <a href="https://tailwindcss.com/"><img src="https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=flat-square&logo=tailwind-css&logoColor=white" alt="Tailwind CSS" /></a>
+    <a href="https://zustand-demo.pmnd.rs/"><img src="https://img.shields.io/badge/Zustand-4A4A55?style=flat-square" alt="Zustand" /></a>
+    <a href="https://framer.com/motion/"><img src="https://img.shields.io/badge/Framer_Motion-0055FF?style=flat-square&logo=framer" alt="Framer Motion" /></a>
+  </p>
+</div>
+
+---
+
+## 🎯 The Mission
+
+The **GATE War Room** is not a standard, passive checklist. It is designed to induce urgency, focus, and a sense of "do or die." I built this specifically to maintain psychological pressure and strict accountability while preparing for **GATE 2027**.
+
+### 🔗 Live Deployment
+**[https://gate-war-room.vercel.app/](https://gate-war-room.vercel.app/)**
+
+---
+
+## ⚡ Core Arsenal (Features)
+
+- **Two-Tier Command Structure**: 
+  - **Active Directives**: The subjects currently under execution. Large, prominent, and demanding attention.
+  - **Standby Queue**: Subjects waiting for deployment. Compact, organized, and out of the immediate line of fire.
+- **Tactical Drag-and-Drop**: Seamlessly drag subjects between the Standby Queue and Active Directives. Built with `@dnd-kit/core` with fluid, real-time spatial shifting.
+- **Aggressive Time Tracking**: Track completion days vs. total allocated days per subject with visceral, glowing progress bars.
+- **Dynamic Threat Calculation**: The deadline automatically calculates based on the remaining days of *only* the Active Directives, giving a hard date for completion.
+- **Merge Protocol**: Ability to select two subjects and fuse them into a single, combined directive (e.g., merging TOC and Compiler Design).
+- **Persistent Local State**: State is preserved entirely in your browser via `localStorage`. No accounts, no database delays.
+
+---
+
+## 🎨 Aesthetic Doctrine
+
+The interface is inspired by brutalist military command terminals and cyberpunk interfaces.
+- **Pitch Black Foundation**: `#050505` and deep matte grays.
+- **Piercing Crimson Accents**: `#E60000` to simulate emergency lighting and critical status.
+- **Animations**: Glitch effects, scanning lines, status blinks, and flickering numbers for deadlines less than 60 days away.
+- **Typography**: Heavy, monospaced fonts (`JetBrains Mono`) for maximum utilitarian feel.
+
+---
+
+## 🛠️ Tech Stack
+
+- **Framework**: [Next.js 15 (App Router)](https://nextjs.org/)
+- **Styling**: [Tailwind CSS v4](https://tailwindcss.com/)
+- **State Management**: [Zustand](https://github.com/pmndrs/zustand) (with `persist` middleware)
+- **Drag & Drop**: [@dnd-kit](https://dndkit.com/) (using `rectSortingStrategy` for grid stability)
+- **Animations**: [Framer Motion](https://www.framer.com/motion/)
+- **Icons**: [Lucide React](https://lucide.dev/)
+
+---
+
+## 🚀 Running Locally
+
+If you want to spin up your own instance of the War Room:
 
 ```bash
+# 1. Clone the repository
+git clone https://github.com/devkaran-solanki/gate-war-room.git
+
+# 2. Navigate into the directory
+cd gate-war-room
+
+# 3. Install dependencies
+npm install
+
+# 4. Start the command center
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `http://localhost:3000` in your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+> *"The successful warrior is the average man, with laser-like focus."*  
+> — Bruce Lee
