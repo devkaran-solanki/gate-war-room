@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { JetBrains_Mono, Inter } from "next/font/google";
+import { Analytics } from "@vercel/analytics/react";
 import "./globals.css";
 
 const jetbrainsMono = JetBrains_Mono({
@@ -34,6 +35,7 @@ export default function RootLayout({
         <div className="scan-overlay" />
         <div className="noise-overlay" />
         {children}
+        <Analytics />
       </body>
     </html>
   );
