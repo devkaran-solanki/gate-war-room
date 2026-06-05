@@ -130,17 +130,7 @@
     }
 }
 
-@keyframes border-pulse {
 
-    0%,
-    100% {
-        border-color: rgba(230, 0, 0, 0.4);
-    }
-
-    50% {
-        border-color: rgba(230, 0, 0, 0.8);
-    }
-}
 
 @keyframes progress-glow {
 
@@ -216,9 +206,6 @@ body {
     animation: flicker 4s infinite;
 }
 
-.animate-border-pulse {
-    animation: border-pulse 2s ease-in-out infinite;
-}
 
 .animate-progress-glow {
     animation: progress-glow 2s ease-in-out infinite;
@@ -244,13 +231,25 @@ body {
 }
 
 /* Card hover glow */
+.card-glow {
+    transition: box-shadow 0.3s ease, transform 0.2s ease, border-color 0.3s ease;
+}
+
 .card-glow:hover {
-    box-shadow: 0 0 15px rgba(230, 0, 0, 0.5), 0 0 30px rgba(230, 0, 0, 0.15);
+    box-shadow: 
+        0 0 8px rgba(230, 0, 0, 0.25), 
+        0 0 20px rgba(230, 0, 0, 0.15), 
+        0 0 40px rgba(230, 0, 0, 0.1) !important;
+    border-color: rgba(230, 0, 0, 0.8) !important;
+    z-index: 10;
 }
 
 /* Active card persistent glow */
 .card-active-glow {
-    box-shadow: 0 0 10px rgba(230, 0, 0, 0.3), 0 0 20px rgba(230, 0, 0, 0.1);
+    box-shadow: 
+        0 0 5px rgba(230, 0, 0, 0.1), 
+        0 0 12px rgba(230, 0, 0, 0.05), 
+        0 0 24px rgba(230, 0, 0, 0.02);
 }
 
 /* Drag handle cursor */

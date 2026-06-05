@@ -1,10 +1,11 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
     DndContext,
     DragOverlay,
     closestCenter,
+    pointerWithin,
     PointerSensor,
     useSensor,
     useSensors,
@@ -12,6 +13,7 @@ import {
     type DragStartEvent,
     type DragEndEvent,
     type DragOverEvent,
+    type CollisionDetection,
 } from '@dnd-kit/core';
 import {
     SortableContext,
@@ -21,6 +23,7 @@ import { motion } from 'framer-motion';
 import {
     Crosshair,
     GitMerge,
+    Scissors,
     Plus,
     Target,
     Clock,
@@ -33,6 +36,9 @@ import {
 import { useStore, type Subject } from './store';
 import SubjectCard from './components/SubjectCard';
 import MergeDialog from './components/MergeDialog';
+import SplitDialog from './components/SplitDialog';
+import DeadlineDialog from './components/DeadlineDialog';
+import EditSubjectDialog from './components/EditSubjectDialog';
 import AddSubjectDialog from './components/AddSubjectDialog';
 
 // Droppable zone wrapper — catches drops in empty space within a zone
@@ -55,13 +61,20 @@ export default function WarRoom() {
         mergeMode,
         mergeSelection,
         toggleMergeMode,
+        splitMode,
+        splitSelection,
+        toggleSplitMode,
+        overallDeadline,
         moveToZone,
         reorder,
     } = useStore();
 
     const [activeSubject, setActiveSubject] = useState<Subject | null>(null);
     const [showMergeDialog, setShowMergeDialog] = useState(false);
+    const [showSplitDialog, setShowSplitDialog] = useState(false);
+    const [showDeadlineDialog, setShowDeadlineDialog] = useState(false);
     const [showAddDialog, setShowAddDialog] = useState(false);
+    const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
     const [mounted, setMounted] = useState(false);
 
     // Hydration guard for Zustand + localStorage
@@ -93,6 +106,50 @@ export default function WarRoom() {
         [subjects]
     );
 
+    // Custom collision detection: use pointerWithin to find which zone the
+    // pointer is inside, then closestCenter *only* among that zone's cards.
+    // This prevents drops from "leaking" to the other zone when dragging
+    // into empty grid space (e.g. far-right of the active zone).
+    const collisionDetection: CollisionDetection = useCallback(
+        (args) => {
+            // Which droppables is the pointer physically inside?
+            const pointerCollisions = pointerWithin(args);
+            const zoneHit = pointerCollisions.find((c) =>
+                c.id.toString().startsWith('zone-')
+            );
+
+            if (zoneHit) {
+                const zoneName =
+                    zoneHit.id === 'zone-active' ? 'active' : 'standby';
+
+                // Only consider cards that belong to this zone
+                const zoneCards = args.droppableContainers.filter(
+                    (container) => {
+                        const id = container.id.toString();
+                        if (id.startsWith('zone-')) return false;
+                        const sub = subjects.find((s) => s.id === id);
+                        return sub?.zone === zoneName;
+                    }
+                );
+
+                if (zoneCards.length > 0) {
+                    const closest = closestCenter({
+                        ...args,
+                        droppableContainers: zoneCards,
+                    });
+                    if (closest.length > 0) return closest;
+                }
+
+                // Zone has no cards — return the zone itself as drop target
+                return [zoneHit];
+            }
+
+            // Pointer isn't inside any zone — default behaviour
+            return closestCenter(args);
+        },
+        [subjects]
+    );
+
     const totalDays = subjects.reduce((sum, s) => sum + s.totalDays, 0);
     const completedDays = subjects.reduce((sum, s) => sum + s.completedDays, 0);
     const overallPercentage = totalDays > 0 ? Math.round((completedDays / totalDays) * 100) : 0;
@@ -110,9 +167,14 @@ export default function WarRoom() {
         year: 'numeric',
     }).toUpperCase();
 
-    // Overall fixed deadline: 31 October 2026
-    const overallDeadline = new Date('2026-10-31T23:59:59');
-    const daysUntilOverallDeadline = Math.max(0, Math.ceil((overallDeadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+    // Overall deadline from store
+    const overallDeadlineDate = new Date(overallDeadline + 'T23:59:59');
+    const daysUntilOverallDeadline = Math.max(0, Math.ceil((overallDeadlineDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+    const deadlineDateDisplay = overallDeadlineDate.toLocaleDateString('en-US', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+    }).toUpperCase();
 
     // Open merge dialog when 2 subjects are selected
     useEffect(() => {
@@ -120,6 +182,13 @@ export default function WarRoom() {
             setShowMergeDialog(true);
         }
     }, [mergeSelection]);
+
+    // Open split dialog when a subject is selected for split
+    useEffect(() => {
+        if (splitSelection) {
+            setShowSplitDialog(true);
+        }
+    }, [splitSelection]);
 
     const handleDragStart = (event: DragStartEvent) => {
         const sub = subjects.find((s) => s.id === event.active.id);
@@ -284,11 +353,17 @@ export default function WarRoom() {
                             </p>
                         </div>
 
-                        <div className="bg-[#0a0a0a] border border-neutral-800 rounded-sm p-3">
+                        <div
+                            onClick={() => setShowDeadlineDialog(true)}
+                            className="bg-[#0a0a0a] border border-neutral-800 rounded-sm p-3 cursor-pointer hover:border-[#E60000]/40 transition-all group/dl"
+                        >
                             <div className="flex items-center gap-1.5 mb-1">
                                 <Flame size={12} className="text-neutral-400" />
                                 <span className="font-mono text-[10px] uppercase tracking-widest text-neutral-400">
                                     DEADLINE
+                                </span>
+                                <span className="ml-auto font-mono text-[9px] uppercase tracking-widest text-neutral-700 opacity-0 group-hover/dl:opacity-100 transition-opacity">
+                                    EDIT
                                 </span>
                             </div>
                             <p className={`font-mono text-lg font-bold ${daysUntilOverallDeadline < 60 ? 'text-[#E60000]' : 'text-orange-400'}`}>
@@ -296,7 +371,7 @@ export default function WarRoom() {
                                 <span className="text-xs text-neutral-400 ml-1">DAYS</span>
                             </p>
                             <p className="font-mono text-[10px] text-neutral-400 mt-0.5">
-                                31 OCT 2026
+                                {deadlineDateDisplay}
                             </p>
                         </div>
 
@@ -337,6 +412,17 @@ export default function WarRoom() {
                         {mergeMode ? 'EXIT MERGE' : 'MERGE MODE'}
                     </button>
 
+                    <button
+                        onClick={toggleSplitMode}
+                        className={`flex items-center gap-2 font-mono text-[11px] font-bold uppercase tracking-wider py-2 px-4 rounded-sm border transition-all ${splitMode
+                            ? 'bg-orange-500/10 text-orange-500 border-orange-500 shadow-[0_0_10px_rgba(249,115,22,0.3)]'
+                            : 'bg-[#111] hover:bg-[#1a1a1a] text-neutral-300 hover:text-white border-neutral-700 hover:border-orange-500 hover:shadow-[0_0_10px_rgba(249,115,22,0.2)]'
+                            }`}
+                    >
+                        <Scissors size={14} />
+                        {splitMode ? 'EXIT SPLIT' : 'SPLIT MODE'}
+                    </button>
+
                     {mergeMode && (
                         <motion.span
                             initial={{ opacity: 0, x: -10 }}
@@ -347,6 +433,17 @@ export default function WarRoom() {
                             SELECT 2 SUBJECTS TO MERGE ({mergeSelection.length}/2)
                         </motion.span>
                     )}
+
+                    {splitMode && (
+                        <motion.span
+                            initial={{ opacity: 0, x: -10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            className="font-mono text-[10px] uppercase tracking-widest text-orange-500 flex items-center gap-1.5"
+                        >
+                            <AlertTriangle size={12} className="animate-pulse" />
+                            SELECT A COMBINED SUBJECT TO SPLIT
+                        </motion.span>
+                    )}
                 </div>
             </div>
 
@@ -354,7 +451,7 @@ export default function WarRoom() {
             <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
                 <DndContext
                     sensors={sensors}
-                    collisionDetection={closestCenter}
+                    collisionDetection={collisionDetection}
                     onDragStart={handleDragStart}
                     onDragOver={handleDragOver}
                     onDragEnd={handleDragEnd}
@@ -396,7 +493,7 @@ export default function WarRoom() {
                                 ) : (
                                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                                         {activeSubjects.map((subject) => (
-                                            <SubjectCard key={subject.id} subject={subject} large />
+                                            <SubjectCard key={subject.id} subject={subject} large onEdit={setEditingSubject} />
                                         ))}
                                     </div>
                                 )}
@@ -440,7 +537,7 @@ export default function WarRoom() {
                                 ) : (
                                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                                         {standbySubjects.map((subject) => (
-                                            <SubjectCard key={subject.id} subject={subject} compact />
+                                            <SubjectCard key={subject.id} subject={subject} compact onEdit={setEditingSubject} />
                                         ))}
                                     </div>
                                 )}
@@ -497,9 +594,22 @@ export default function WarRoom() {
                 open={showMergeDialog}
                 onClose={() => setShowMergeDialog(false)}
             />
+            <SplitDialog
+                open={showSplitDialog}
+                onClose={() => setShowSplitDialog(false)}
+            />
+            <DeadlineDialog
+                open={showDeadlineDialog}
+                onClose={() => setShowDeadlineDialog(false)}
+            />
             <AddSubjectDialog
                 open={showAddDialog}
                 onClose={() => setShowAddDialog(false)}
+            />
+            <EditSubjectDialog
+                open={!!editingSubject}
+                subject={editingSubject}
+                onClose={() => setEditingSubject(null)}
             />
         </div>
     );

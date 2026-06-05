@@ -20,7 +20,12 @@ export default function MergeDialog({ open, onClose }: MergeDialogProps) {
 
   useEffect(() => {
     if (open && sub1 && sub2) {
-      setNewName(`${sub1.name} + ${sub2.name}`);
+      // Split each name on '+', trim parts, then rejoin all with ' + '
+      // e.g. 'EM+TOC' + 'CD' → 'EM + TOC + CD'
+      const allParts = [sub1.name, sub2.name]
+        .flatMap((n) => n.split('+').map((p) => p.trim()))
+        .filter((p) => p.length > 0);
+      setNewName(allParts.join(' + '));
       setTimeout(() => {
         inputRef.current?.focus();
         inputRef.current?.select();

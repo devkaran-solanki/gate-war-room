@@ -16,6 +16,9 @@ interface StoreState {
   subjects: Subject[];
   mergeSelection: string[];
   mergeMode: boolean;
+  splitMode: boolean;
+  splitSelection: string | null;
+  overallDeadline: string; // ISO date string e.g. '2026-10-31'
 
   // Zone management
   moveToZone: (id: string, zone: 'active' | 'standby') => void;
@@ -33,6 +36,15 @@ interface StoreState {
   toggleMergeSelection: (id: string) => void;
   clearMergeSelection: () => void;
   mergeSubjects: (newName: string) => void;
+
+  // Split
+  toggleSplitMode: () => void;
+  selectSplitSubject: (id: string) => void;
+  clearSplitSelection: () => void;
+  splitSubject: (parts: { name: string; days: number }[]) => void;
+
+  // Deadline
+  setOverallDeadline: (date: string) => void;
 }
 
 const initialSubjects: Subject[] = [
@@ -55,6 +67,9 @@ export const useStore = create<StoreState>()(
       subjects: initialSubjects,
       mergeSelection: [],
       mergeMode: false,
+      splitMode: false,
+      splitSelection: null,
+      overallDeadline: '2026-10-31',
 
       moveToZone: (id, zone) =>
         set((state) => {
@@ -196,6 +211,9 @@ export const useStore = create<StoreState>()(
         set((state) => ({
           mergeMode: !state.mergeMode,
           mergeSelection: [],
+          // Exit split mode if entering merge mode
+          splitMode: !state.mergeMode ? false : state.splitMode,
+          splitSelection: !state.mergeMode ? null : state.splitSelection,
         })),
 
       toggleMergeSelection: (id) =>
@@ -235,6 +253,65 @@ export const useStore = create<StoreState>()(
             mergeMode: false,
           };
         }),
+
+      // Split
+      toggleSplitMode: () =>
+        set((state) => ({
+          splitMode: !state.splitMode,
+          splitSelection: null,
+          // Exit merge mode if entering split mode
+          mergeMode: !state.splitMode ? false : state.mergeMode,
+          mergeSelection: !state.splitMode ? [] : state.mergeSelection,
+        })),
+
+      selectSplitSubject: (id) =>
+        set((state) => {
+          const sub = state.subjects.find((s) => s.id === id);
+          if (!sub || !sub.name.includes('+')) return state;
+          return { splitSelection: id };
+        }),
+
+      clearSplitSelection: () => set({ splitSelection: null }),
+
+      splitSubject: (parts) =>
+        set((state) => {
+          const sourceId = state.splitSelection;
+          if (!sourceId) return state;
+          const source = state.subjects.find((s) => s.id === sourceId);
+          if (!source) return state;
+
+          const newSubjects = parts.map((part, i) => ({
+            id: genId(),
+            name: part.name.toUpperCase(),
+            totalDays: part.days,
+            completedDays: 0,
+            zone: source.zone,
+            order: source.order + i,
+          } as Subject));
+
+          // Re-index orders for the zone
+          const withoutSource = state.subjects.filter((s) => s.id !== sourceId);
+          const sameZone = withoutSource
+            .filter((s) => s.zone === source.zone)
+            .sort((a, b) => a.order - b.order);
+
+          // Insert new subjects at the source's position
+          const insertIdx = sameZone.findIndex((s) => s.order >= source.order);
+          const reordered = insertIdx === -1
+            ? [...sameZone, ...newSubjects]
+            : [...sameZone.slice(0, insertIdx), ...newSubjects, ...sameZone.slice(insertIdx)];
+
+          const reindexed = reordered.map((s, idx) => ({ ...s, order: idx }));
+          const otherZone = withoutSource.filter((s) => s.zone !== source.zone);
+
+          return {
+            subjects: [...otherZone, ...reindexed],
+            splitSelection: null,
+            splitMode: false,
+          };
+        }),
+
+      setOverallDeadline: (date) => set({ overallDeadline: date }),
     }),
     {
       name: 'gate-war-room-storage',
