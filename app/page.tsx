@@ -32,6 +32,7 @@ import {
     Flame,
     Swords,
     ShieldAlert,
+    CheckCheck,
 } from 'lucide-react';
 import { useStore, type Subject } from './store';
 import SubjectCard from './components/SubjectCard';
@@ -67,6 +68,7 @@ export default function WarRoom() {
         overallDeadline,
         moveToZone,
         reorder,
+        archiveAllCompleted,
     } = useStore();
 
     const [activeSubject, setActiveSubject] = useState<Subject | null>(null);
@@ -106,6 +108,14 @@ export default function WarRoom() {
         [subjects]
     );
 
+    const completedSubjects = useMemo(
+        () =>
+            subjects
+                .filter((s) => s.zone === 'completed')
+                .sort((a, b) => a.order - b.order),
+        [subjects]
+    );
+
     // Custom collision detection: use pointerWithin to find which zone the
     // pointer is inside, then closestCenter *only* among that zone's cards.
     // This prevents drops from "leaking" to the other zone when dragging
@@ -120,7 +130,8 @@ export default function WarRoom() {
 
             if (zoneHit) {
                 const zoneName =
-                    zoneHit.id === 'zone-active' ? 'active' : 'standby';
+                    zoneHit.id === 'zone-active' ? 'active' : 
+                    zoneHit.id === 'zone-standby' ? 'standby' : 'completed';
 
                 // Only consider cards that belong to this zone
                 const zoneCards = args.droppableContainers.filter(
@@ -206,8 +217,8 @@ export default function WarRoom() {
         const activeSub = subjects.find((s) => s.id === activeId);
 
         // Dropping over a zone container (empty space)
-        if (overId === 'zone-active' || overId === 'zone-standby') {
-            const targetZone = overId === 'zone-active' ? 'active' : 'standby';
+        if (overId === 'zone-active' || overId === 'zone-standby' || overId === 'zone-completed') {
+            const targetZone = overId === 'zone-active' ? 'active' : overId === 'zone-standby' ? 'standby' : 'completed';
             if (activeSub && activeSub.zone !== targetZone) {
                 moveToZone(activeId, targetZone);
             }
@@ -236,7 +247,7 @@ export default function WarRoom() {
         if (activeId === overId) return;
 
         // Dropping on zone container — already handled in onDragOver
-        if (overId === 'zone-active' || overId === 'zone-standby') return;
+        if (overId === 'zone-active' || overId === 'zone-standby' || overId === 'zone-completed') return;
 
         // Reorder within zone
         const activeSub = subjects.find((s) => s.id === activeId);
@@ -466,6 +477,14 @@ export default function WarRoom() {
                                 </h2>
                             </div>
                             <div className="flex-1 h-px bg-gradient-to-r from-[#E60000]/40 to-transparent" />
+                            <button
+                                onClick={archiveAllCompleted}
+                                className="font-mono text-[10px] uppercase tracking-widest bg-[#111] hover:bg-[#1a1a1a] text-neutral-300 hover:text-white border border-neutral-700 hover:border-green-500 py-1 px-2 rounded-sm transition-all flex items-center gap-1.5"
+                                title="Move all 100% active subjects to completed queue"
+                            >
+                                <CheckCheck size={12} className="text-green-500" />
+                                ARCHIVE COMPLETED SUBJECTS
+                            </button>
                             <span className="font-mono text-[10px] uppercase tracking-widest text-[#E60000] flex items-center gap-1">
                                 <span className="animate-status-blink">●</span>
                                 {activeSubjects.length} ENGAGED
@@ -537,6 +556,50 @@ export default function WarRoom() {
                                 ) : (
                                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                                         {standbySubjects.map((subject) => (
+                                            <SubjectCard key={subject.id} subject={subject} compact onEdit={setEditingSubject} />
+                                        ))}
+                                    </div>
+                                )}
+                            </SortableContext>
+                        </DroppableZone>
+                    </section>
+
+                    {/* ===== COMPLETED QUEUE ZONE ===== */}
+                    <section className="mb-10">
+                        <div className="flex items-center gap-3 mb-4 mt-10">
+                            <div className="flex items-center gap-2">
+                                <ShieldAlert size={18} className="text-green-500" />
+                                <h2 className="font-mono text-sm font-black uppercase tracking-[0.2em] text-green-400">
+                                    COMPLETED QUEUE
+                                </h2>
+                            </div>
+                            <div className="flex-1 h-px bg-gradient-to-r from-green-500/40 to-transparent" />
+                            <span className="font-mono text-[10px] uppercase tracking-widest text-green-600">
+                                {completedSubjects.length} SECURED
+                            </span>
+                        </div>
+
+                        <DroppableZone
+                            id="zone-completed"
+                            className="min-h-[120px] rounded-sm border border-green-900/30 bg-green-900/10 p-4"
+                        >
+                            <SortableContext
+                                items={completedSubjects.map((s) => s.id)}
+                                strategy={rectSortingStrategy}
+                            >
+                                {completedSubjects.length === 0 ? (
+                                    <div className="flex flex-col items-center justify-center py-8 text-green-700/50">
+                                        <ShieldAlert size={32} className="mb-2 opacity-30" />
+                                        <p className="font-mono text-xs uppercase tracking-widest">
+                                            COMPLETED QUEUE EMPTY
+                                        </p>
+                                        <p className="font-mono text-[10px] text-green-800 mt-1">
+                                            NO SUBJECTS 100% COMPLETE YET
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                                        {completedSubjects.map((subject) => (
                                             <SubjectCard key={subject.id} subject={subject} compact onEdit={setEditingSubject} />
                                         ))}
                                     </div>

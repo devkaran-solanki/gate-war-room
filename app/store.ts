@@ -8,7 +8,7 @@ export interface Subject {
   name: string;
   totalDays: number;
   completedDays: number;
-  zone: 'active' | 'standby';
+  zone: 'active' | 'standby' | 'completed';
   order: number;
 }
 
@@ -21,14 +21,14 @@ interface StoreState {
   overallDeadline: string; // ISO date string e.g. '2026-10-31'
 
   // Zone management
-  moveToZone: (id: string, zone: 'active' | 'standby') => void;
+  moveToZone: (id: string, zone: 'active' | 'standby' | 'completed') => void;
   reorder: (activeId: string, overId: string) => void;
 
   // Subject CRUD
   updateSubject: (id: string, updates: Partial<Pick<Subject, 'name' | 'totalDays'>>) => void;
   incrementDay: (id: string) => void;
   decrementDay: (id: string) => void;
-  addSubject: (name: string, days: number, zone: 'active' | 'standby') => void;
+  addSubject: (name: string, days: number, zone: 'active' | 'standby' | 'completed') => void;
   deleteSubject: (id: string) => void;
 
   // Merge
@@ -45,6 +45,9 @@ interface StoreState {
 
   // Deadline
   setOverallDeadline: (date: string) => void;
+
+  // Archive
+  archiveAllCompleted: () => void;
 }
 
 const initialSubjects: Subject[] = [
@@ -75,6 +78,9 @@ export const useStore = create<StoreState>()(
         set((state) => {
           const subjects = state.subjects.map((s) => {
             if (s.id === id) {
+              if (s.completedDays === s.totalDays && zone === 'standby') {
+                return s; // Cannot move 100% subject to standby
+              }
               const maxOrder = Math.max(
                 -1,
                 ...state.subjects.filter((x) => x.zone === zone).map((x) => x.order)
@@ -93,6 +99,11 @@ export const useStore = create<StoreState>()(
           if (!activeItem || !overItem) return state;
 
           const targetZone = overItem.zone;
+          
+          if (activeItem.completedDays === activeItem.totalDays && targetZone === 'standby') {
+             return state; // Cannot reorder 100% subject into standby
+          }
+
           const zoneItems = state.subjects
             .filter((s) => s.zone === targetZone || s.id === activeId)
             .filter((s) => s.zone === targetZone || s.id === activeId);
@@ -147,37 +158,43 @@ export const useStore = create<StoreState>()(
 
       updateSubject: (id, updates) =>
         set((state) => ({
-          subjects: state.subjects.map((s) =>
-            s.id === id
-              ? {
-                  ...s,
-                  ...updates,
-                  // Ensure completedDays doesn't exceed new totalDays
-                  completedDays:
-                    updates.totalDays !== undefined
-                      ? Math.min(s.completedDays, updates.totalDays)
-                      : s.completedDays,
-                }
-              : s
-          ),
+          subjects: state.subjects.map((s) => {
+            if (s.id === id) {
+              const newCompletedDays = updates.totalDays !== undefined
+                ? Math.min(s.completedDays, updates.totalDays)
+                : s.completedDays;
+              
+              return {
+                ...s,
+                ...updates,
+                completedDays: newCompletedDays,
+              };
+            }
+            return s;
+          }),
         })),
 
       incrementDay: (id) =>
         set((state) => ({
-          subjects: state.subjects.map((s) =>
-            s.id === id && s.completedDays < s.totalDays
-              ? { ...s, completedDays: s.completedDays + 1 }
-              : s
-          ),
+          subjects: state.subjects.map((s) => {
+            if (s.id === id && s.completedDays < s.totalDays) {
+              const newCompleted = s.completedDays + 1;
+              return { ...s, completedDays: newCompleted };
+            }
+            return s;
+          }),
         })),
 
       decrementDay: (id) =>
         set((state) => ({
-          subjects: state.subjects.map((s) =>
-            s.id === id && s.completedDays > 0
-              ? { ...s, completedDays: s.completedDays - 1 }
-              : s
-          ),
+          subjects: state.subjects.map((s) => {
+            if (s.id === id && s.completedDays > 0) {
+              const newCompleted = s.completedDays - 1;
+              const newZone = s.zone === 'completed' ? 'active' : s.zone;
+              return { ...s, completedDays: newCompleted, zone: newZone };
+            }
+            return s;
+          }),
         })),
 
       addSubject: (name, days, zone) =>
@@ -312,6 +329,19 @@ export const useStore = create<StoreState>()(
         }),
 
       setOverallDeadline: (date) => set({ overallDeadline: date }),
+
+      archiveAllCompleted: () =>
+        set((state) => {
+          let nextOrder = Math.max(-1, ...state.subjects.filter(s => s.zone === 'completed').map(s => s.order)) + 1;
+          return {
+            subjects: state.subjects.map((s) => {
+              if (s.zone === 'active' && s.completedDays === s.totalDays) {
+                return { ...s, zone: 'completed', order: nextOrder++ };
+              }
+              return s;
+            })
+          };
+        }),
     }),
     {
       name: 'gate-war-room-storage',

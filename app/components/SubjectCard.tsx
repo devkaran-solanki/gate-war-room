@@ -14,6 +14,7 @@ import {
     Target,
     Clock,
     Shield,
+    CheckCheck,
 } from 'lucide-react';
 import { Subject, useStore } from '../store';
 
@@ -39,6 +40,7 @@ export default function SubjectCard({ subject, isDragOverlay, compact: compactPr
         splitMode,
         splitSelection,
         selectSplitSubject,
+        moveToZone,
     } = useStore();
 
     const {
@@ -170,19 +172,31 @@ export default function SubjectCard({ subject, isDragOverlay, compact: compactPr
 
                     {/* Action buttons */}
                     {!mergeMode && !splitMode && !isDragOverlay && (
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                                onClick={(e) => { e.stopPropagation(); onEdit?.(subject); }}
-                                className="p-1 text-neutral-600 hover:text-orange-500 hover:bg-orange-500/10 rounded-sm transition-all"
-                            >
-                                <Pencil size={14} />
-                            </button>
-                            <button
-                                onClick={(e) => { e.stopPropagation(); deleteSubject(subject.id); }}
-                                className="p-1 text-neutral-600 hover:text-[#E60000] hover:bg-[#E60000]/10 rounded-sm transition-all"
-                            >
-                                <Trash2 size={14} />
-                            </button>
+                        <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); onEdit?.(subject); }}
+                                    className="p-1 text-neutral-600 hover:text-orange-500 hover:bg-orange-500/10 rounded-sm transition-all"
+                                >
+                                    <Pencil size={14} />
+                                </button>
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); deleteSubject(subject.id); }}
+                                    className="p-1 text-neutral-600 hover:text-[#E60000] hover:bg-[#E60000]/10 rounded-sm transition-all"
+                                >
+                                    <Trash2 size={14} />
+                                </button>
+                            </div>
+                            {isComplete && subject.zone !== 'completed' && (
+                                <button
+                                    onClick={(e) => { e.stopPropagation(); moveToZone(subject.id, 'completed'); }}
+                                    className="font-mono text-[10px] uppercase tracking-widest bg-[#111] hover:bg-[#1a1a1a] text-neutral-300 hover:text-white border border-neutral-700 hover:border-green-500 py-1 px-2 rounded-sm transition-all flex items-center gap-1.5"
+                                    title="Move to Completed Queue"
+                                >
+                                    <CheckCheck size={12} className="text-green-500" />
+                                    ARCHIVE SUBJECT
+                                </button>
+                            )}
                         </div>
                     )}
                 </div>
